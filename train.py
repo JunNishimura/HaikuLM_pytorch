@@ -1,12 +1,14 @@
+import os
 import torch
 import torch.nn as nn
 from torch.utils.data.dataloader import DataLoader
 
 import pandas as pd
+import numpy as np
 from params import *
+from preprocessor import Preprocessor
 from dataset import HaikuDataset
 from model import HaikuModel
-from utils import preprocess, split_by_seqlength, text_to_ids
 
 
 def train():
@@ -21,54 +23,67 @@ def train():
     # 俳句リストの取得
     haiku_list = df.haiku.tolist()
 
-    # vocab, char_to_id, id_to_charの取得
-    vocab, char_to_id, id_to_char = preprocess(haiku_list)
-
-    # 俳句リストを一つのテキストとして保持
-    haiku_text = '\n'.join(haiku_list) 
-
-    # haiku_textをidの列に変換
-    ids = text_to_ids(haiku_text, char_to_id)
-
-    # idsをSEQ_LENGTHで分割
-    ids = split_by_seqlength(ids, SEQ_LENGTH)
+    # preprocessor 
+    haiku_preprocessor = Preprocessor(SEQ_LENGTH)
+    haiku_preprocessor.fit(haiku_list)
     
+    # haiku_textをidの列に変換
+    ids_list = haiku_preprocessor(haiku_list)
+
     # 俳句データセットの作成
-    dataset = HaikuDataset(ids)
+    dataset = HaikuDataset(ids_list)
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
 
-    # preparation for training
-    vocab_size = len(vocab) + 1 # padding用のIDを追加するために+1をする
+    # trainingの準備
+    vocab_size = len(haiku_preprocessor.char_to_id)
     model = HaikuModel(vocab_size, EMBEDDING_DIM, HIDDEN_SIZE, NUM_LAYERS)
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+
+    # checkpointsディレクトリの作成
+    cur_dir = os.path.dirname(os.path.abspath(__file__))
+    tar_dir = os.path.join(cur_dir, 'checkpoints')
+    os.makedirs(tar_dir, exist_ok=True)
 
     # train
     model.train()
     all_losses = []
     for epoch in range(EPOCHS):
+        print('-'*25)
+        print(f'EPOCH: {epoch+1}')
+
         total_loss = 0
-        for i, (X_train, y_train) in enumerate(dataloader):
+        for X_train, y_train in dataloader:
             optimizer.zero_grad()
             X_train, y_train = X_train.to(model.device), y_train.to(model.device)
             state_h, state_c = model.initHidden(BATCH_SIZE)
 
             y_pred, (state_h, state_c) = model(X_train, (state_h, state_c))
-            y_pred = y_pred.reshape(-1, vocab_size)
-            y_train = y_train.reshape(-1).long()
-            # print('y_pred shape: ', y_pred.shape)
-            # print('y_train shape: ', y_train.shape)
+            y_pred = y_pred.view(-1, vocab_size)
+            y_train = y_train.view(-1)
             loss = criterion(y_pred, y_train)
-            total_loss += loss
+            total_loss += loss.item()
 
             loss.backward()
             optimizer.step()
-        all_losses.append(total_loss / i)
 
+        current_loss = total_loss / len(dataloader)
+        current_ppl  = np.exp(current_loss)
+        print(f'LOSS: {current_loss}, PERPLEXITY: {current_ppl}')
+        all_losses.append(current_loss)
+
+        # 10epoch毎にsave
         if epoch % 10 == 0:
-            print(f'epoch: {epoch:3}, loss: {loss:3f}')
+            path = f'./checkpoints/ckpt_{epoch}.pt'
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': current_loss
+            }, path)
     
-
+    # 学習の最後にモデルを保存
+    torch.save(model.state_dict(), f'./checkpoints/final.pt')
 
 if __name__ == '__main__':
     train()

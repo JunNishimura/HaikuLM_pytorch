@@ -1,5 +1,4 @@
 HAIKU_PKL_PATH = '../pickles/haiku_df_small.pkl'
-CHECKPOINT_DIR = './training_checkpoints'
 SEQ_LENGTH = 100
 BATCH_SIZE = 50
 BUFFER_SIZE = 10000
