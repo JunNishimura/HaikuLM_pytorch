@@ -10,7 +10,6 @@ from preprocessor import Preprocessor
 from dataset import HaikuDataset
 from model import HaikuModel
 
-
 def train():
     # 俳句DataFrameの取得
     try:
@@ -40,17 +39,29 @@ def train():
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
-    # checkpointsディレクトリの作成
-    cur_dir = os.path.dirname(os.path.abspath(__file__))
-    tar_dir = os.path.join(cur_dir, 'checkpoints')
-    os.makedirs(tar_dir, exist_ok=True)
+    # epochの定義
+    epoch = 1
+
+    # checkpointの有無を確認
+    checkpoint_dir = './checkpoints'
+    if os.path.exists(checkpoint_dir) and len(os.listdir(checkpoint_dir)):
+        # checkpointが最終のものを抽出して、途中から学習を再開する
+        epoch = max(map(lambda x: int(x.split('.')[0].split('_')[1]), os.listdir(checkpoint_dir)))
+        checkpoint = torch.load(os.path.join(checkpoint_dir, f'ckpt_{epoch}.pt'))
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        epoch = checkpoint['epoch']
+        loss = checkpoint['loss']
+    else:
+        # checkpointディレクトリを作成
+        os.makedirs(checkpoint_dir, exist_ok=True)
 
     # train
     model.train()
     all_losses = []
-    for epoch in range(EPOCHS):
+    while epoch <= EPOCHS:
         print('-'*25)
-        print(f'EPOCH: {epoch+1}')
+        print(f'EPOCH: {epoch}')
 
         total_loss = 0
         for X_train, y_train in dataloader:
@@ -81,6 +92,9 @@ def train():
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss': current_loss
             }, path)
+        
+        # epochの更新
+        epoch += 1
     
     # 学習の最後にモデルを保存
     torch.save(model.state_dict(), f'./checkpoints/final.pt')
