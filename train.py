@@ -5,10 +5,23 @@ from torch.utils.data.dataloader import DataLoader
 
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 from params import *
 from preprocessor import Preprocessor
 from dataset import HaikuDataset
 from model import HaikuModel
+
+def visualize_training(history: dict, label: str):
+    result = history[label]
+
+    fig = plt.figure(figsize=(12, 9))
+    plt.plot(range(len(result)), result, linewidth=1, label=label)
+    plt.xlabel('epochs')
+    plt.xticks(range(len(result)), [i*10 for i in range(len(result))])
+    plt.ylabel(label)
+    plt.legend()
+    plt.savefig(f'{label}_result.jpg')
+    plt.show()
 
 def train():
     # 俳句DataFrameの取得
@@ -58,7 +71,7 @@ def train():
 
     # train
     model.train()
-    all_losses = []
+    history = {'loss': [], 'ppl': []}
     while epoch <= EPOCHS:
         print('-'*25)
         print(f'EPOCH: {epoch}')
@@ -81,7 +94,8 @@ def train():
         current_loss = total_loss / len(dataloader)
         current_ppl  = np.exp(current_loss)
         print(f'LOSS: {current_loss}, PERPLEXITY: {current_ppl}')
-        all_losses.append(current_loss)
+        history['loss'].append(current_loss)
+        history['ppl'].append(current_ppl)
 
         # 10epoch毎にsave
         if epoch % 10 == 0:
@@ -98,6 +112,10 @@ def train():
     
     # 学習の最後にモデルを保存
     torch.save(model.state_dict(), f'./checkpoints/final.pt')
+
+    # 結果を可視化する
+    visualize_training(history, 'loss')
+    visualize_training(history, 'ppl')
 
 if __name__ == '__main__':
     train()
