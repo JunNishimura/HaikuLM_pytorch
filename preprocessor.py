@@ -49,8 +49,6 @@ class Preprocessor():
         ----------
             text: str
                 target text
-            seq_length: int
-                length of a sequence
 
         Return
         ------
