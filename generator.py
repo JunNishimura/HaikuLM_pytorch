@@ -6,6 +6,7 @@ import numpy as np
 from params import *
 from preprocessor import Preprocessor
 from model import HaikuModel
+from filters import HaikuFilter
 
 def generate():
     # 俳句DataFrameの取得
@@ -28,8 +29,11 @@ def generate():
     model = HaikuModel(VOCAB_SIZE, EMBEDDING_DIM, HIDDEN_SIZE, NUM_LAYERS)
     
     # modelのload
-    model.load_state_dict(torch.load('./checkpoints/ckpt_10.pt')['model_state_dict'])
+    model.load_state_dict(torch.load('../checkpoints/ckpt_40.pt')['model_state_dict'])
     model.eval()
+
+    # 俳句フィルター
+    haiku_filter = HaikuFilter()
 
     # inference
     generated_haikulist = []
@@ -40,6 +44,7 @@ def generate():
             states = model.initHidden(batch_size=1) # inference時のbatch sizeは1
             haiku = ''
 
+            # 俳句の生成
             while True:
                 input_id = [[prepro.char_to_id[next_char]]]
                 input_tensor = torch.tensor(input_id, device=model.device)
@@ -53,7 +58,15 @@ def generate():
                     break
                 else:
                     haiku += next_char
-            
+
+            # 俳句のフィルタリング
+
+            # 1. 季語の有無チェック
+            kigo, season = haiku_filter.check_kigo(haiku)
+            if not kigo: # 季語ない場合は俳句として認めない
+                continue
+
+            # フィルターをパスした句はgenerated_haikulistに追加する
             generated_haikulist.append(haiku)
             print(haiku)
 
